@@ -1,0 +1,113 @@
+unit uSmetsDCCTests;
+
+interface
+
+uses
+  DUnitX.TestFramework, LoginUnit, Main, CrmCommon, DMImages, vcl.Forms,
+  UELSqlUtils, System.SysUtils, smets_DCC, SmetsCommon;
+
+type
+  TFrm_SmetsDCCsub = class(TFrm_Smets_Dcc);
+
+  [TestFixture]
+  TTestCaseSmetsDCC = class
+  private
+    FRM_SmetsDCCSub : TFrm_SmetsDCCsub;
+
+  public
+    [SetupFixture]
+    procedure SetupFixture;
+
+    [TearDownFixture]
+    procedure TearDownFixture;
+
+    [Test]
+    [TestCase('Test A - Smets DCC Check for E&A Gas Meter OK', '1,1113869802,202485301801')]
+    [TestCase('Test B - Smets DCC Check for Electric Meter', '0,1200030581539,1404390318')]
+    [TestCase('Test C - Smets DCC Check for Electric Meter', '0,1100009364782,293788158301')]
+    [TestCase('Test D - Smets DCC Check for Gas Meter', '1,7669565108,892895474002')]
+    procedure TestIconsConfigScreenMeterLabelEAGasCheck(aService: integer; aSpan: string; aAgreementId: Int64 = 0);
+
+    [Test]
+    [TestCase('Test - Electric meter with HAS_SC_TARIFF flag', '0,3200000479226,0')]
+    [TestCase('Test - Gas meter with HAS_SC_TARIFF flag', '1,593986505,0')]
+    procedure TestHasSCTariffFlag(aService: integer; aSpan: string; aAgreementId: Int64 = 0);
+
+  end;
+
+implementation
+
+procedure TTestCaseSmetsDCC.SetupFixture;
+begin
+
+  Application.CreateForm(TFRM_MAIN, FRM_MAIN);
+  Application.CreateForm(TDM_Images, DM_Images);
+  Application.CreateForm(TFRM_Login, FRM_Login);
+
+  FRM_LOGIN.MainSession.LogonUsername := 'TEST01';
+  FRM_LOGIN.MainSession.LogonPassword := 'TEST01';
+  FRM_LOGIN.MainSession.LogonDatabase := 'DEVCRM';
+  FRM_LOGIN.MainSession.Connected     := true;
+  UserID := FRM_LOGIN.MainSession.LogonUsername;
+
+  gSqlUtil := TSqlUtil.create(FRM_Login.mainsession);
+
+end;
+
+procedure TTestCaseSmetsDCC.TearDownFixture;
+begin
+  FreeAndNil(gSqlUtil);
+  FreeAndNil(FRM_MAIN);
+  FreeAndNil(DM_Images);
+  FreeAndNil(FRM_Login);
+end;
+
+procedure TTestCaseSmetsDCC.TestIconsConfigScreenMeterLabelEAGasCheck(aService: integer; aSpan: string; aAgreementId: Int64 = 0);
+var
+  Expected, Actual : Boolean;
+begin
+  Expected := true;
+  FRM_SmetsDCCSub := TFrm_SmetsDCCsub.Create(Frm_SmetsDCCsub, aService, aSpan, aAgreementID);
+
+  try
+    if aService = SERVICE_GAS then
+    begin
+      Actual := (FRM_SmetsDCCSub.GetMeterTypeIndex = 313)
+         and (FRM_SmetsDCCSub.fService = SERVICE_GAS)
+          and (FRM_SmetsDCCSub.MeterTypeLabel.Caption = 'Smets 1 E&&A Smart Meter');
+    end
+    else
+    begin
+      Actual := (FRM_SmetsDCCSub.fService = aService)
+         and (FRM_SmetsDCCSub.GetMeterTypeIndex > 0);
+    end;
+    
+    Assert.AreEqual(Expected,Actual, 'Wrong Meter Type');
+
+  finally
+    FreeAndNil(FRM_SmetsDCCSub);
+  end;
+end;
+
+procedure TTestCaseSmetsDCC.TestHasSCTariffFlag(aService: integer; aSpan: string; aAgreementId: Int64 = 0);
+var
+  Expected, Actual: integer;
+begin
+  Expected := 321; // ICON_LARGEIMAGES__STANDING_CHARGE
+  FRM_SmetsDCCSub := TFrm_SmetsDCCsub.Create(Frm_SmetsDCCsub, aService, aSpan, aAgreementID);
+
+  try
+    Actual := FRM_SmetsDCCSub.GetMeterTypeIndex;
+    Assert.AreEqual(Expected, Actual, 'Meter with HAS_SC_TARIFF should have icon index 321');
+
+  finally
+    FreeAndNil(FRM_SmetsDCCSub);
+  end;
+end;
+
+initialization
+{$IFDEF METERING}
+  TDUnitX.RegisterTestFixture(TTestCaseSmetsDCC);
+{$ENDIF}
+
+end.

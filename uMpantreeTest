@@ -1,0 +1,526 @@
+unit uMPANTREETests;
+
+interface
+
+uses
+  DUnitX.TestFramework, LoginUnit, DataModule, Main, splash, About, CrmCommon,
+  MPANTREE, DMImages, vcl.Forms, Common, MainSearch, Customer_Consent, letter_templates,
+  MOServiceOrders, EnqSummary, UELSqlUtils, EnquirySearchUnit, System.SysUtils,
+  FeatureAccess, VirtualTrees, DPACheck, Processing, Loss_Outcome, Vcl.Menus, System.Classes,
+  uChangeOfTenancy;
+
+  {DUnitX.TestFramework, LoginUnit,
+  MPANTREE, vcl.Forms,
+  UELSqlUtils, System.SysUtils,
+  Data.DB;}
+
+type
+  TFRMLoginSub = class(TFRM_Login);
+  TFRM_TreeSub = class(TFRM_Tree);
+
+  [TestFixture]
+  TMPANTREETests = class
+  private
+    FRM_TreeSub: TFRM_TreeSub;
+    function FindPopupMenu(aName: string): TPopupMenu;
+    function FindMenuItem(aMenu: TMenuItem; aMenuItemName: string): TMenuItem;
+  public
+    [SetupFixture]
+    procedure SetupFixture;
+    [TearDownFixture]
+    procedure TearDownFixture;
+
+    [Setup]
+    procedure Setup;
+    [TearDown]
+    procedure TearDown;
+
+//     Sample Methods
+//     Simple single Test
+    [Test]
+    [TestCase('Test Existing ASC Request', 'PopUpPremise,mniASCRequest')]
+    procedure TestFindMenuItem(aPopupMenuName, aMenuItemName: string);
+    [Test]
+    [TestCase('Test - Opening basket from the span branch,BALDINOL', 'BALDINOL,BALDINOL,1900091217512')]
+    procedure TestOpeningAllEnquiriesNotes(aUserName, aPassword, aMPAN: string);
+
+    [Test]
+    [TestCase('Test - Opening basket from the span branch,BALDINOL', 'BALDINOL,BALDINOL,3627784924')]
+    procedure TestOpeningAllEnquiriesNotesAfterSearchingFromCustomer(aUserName, aPassword, aCustomerID: string);
+
+//     Test with TestCase Attribute to supply parameters.
+    [Test]
+    [TestCase('Test - Opening basket from the span branch after expand all the way to the customer branch,BALDINOL', 'BALDINOL,BALDINOL,1900091217512')]
+    procedure TestOpeningAllEnquiriesNotesAfterExpandingTheFullCustomerTreeView(aUserName, aPassword, aMPAN: string);
+    procedure ExpandAllNodes(aTree: TVirtualStringTree);
+    procedure FindNodeByText(aVirtualStringTree: TVirtualStringTree; aNode: PVirtualNode; const aSearchText: string; var aFoundNode: PVirtualNode);
+
+    [Test]
+    [TestCase('Test - Customer with active flag', '8171729735')]
+    procedure TestCustomerHasInvoluntaryModeChangeFlagSuccess(aCustomerId: Int64);
+    [Test]
+    [TestCase('Test - Customer without active flag', '3102703089')]
+    procedure TestCustomerHasInvoluntaryModeChangeFlagFail(aCustomerId: Int64);
+
+    [Test]
+    [TestCase('Test - Electric meter with HAS_SC_TARIFF flag', '3200000479226')]
+    procedure TestElectricMeterHasSCTariffFlag(aMpxn: string);
+    [Test]
+    [TestCase('Test - Gas meter with HAS_SC_TARIFF flag', '593986505')]
+    procedure TestGasMeterHasSCTariffFlag(aMpxn: string);
+
+  end;
+
+implementation
+
+procedure TMPANTREETests.ExpandAllNodes(aTree: TVirtualStringTree);
+begin
+  aTree.BeginUpdate;
+  aTree.FullExpand;
+  aTree.endUpdate;
+end;
+
+function TMPANTREETests.FindMenuItem(aMenu: TMenuItem; aMenuItemName: string): TMenuItem;
+var
+  i: Integer;
+begin
+  Result := nil;
+
+  if aMenu.Name = aMenuItemName then
+  begin
+    Result := aMenu;
+    Exit;
+  end;
+
+  for i := 0 to aMenu.Count - 1 do
+  begin
+    Result := FindMenuItem(aMenu.Items[i], aMenuItemName);
+    if Assigned(Result) then
+      Exit;
+  end;
+end;
+
+procedure TMPANTREETests.FindNodeByText(aVirtualStringTree: TVirtualStringTree; aNode: PVirtualNode; const aSearchText: string; var aFoundNode: PVirtualNode);
+var
+  NodeText: string;
+begin
+  if not Assigned(aNode) then
+    Exit;
+
+  // Retrieve the node's text
+  NodeText := aVirtualStringTree.Text[aNode, -1]; // Replace -1 with the column index if applicable
+
+  // Check if this is the node you're searching for
+  if Pos(aSearchText, NodeText) > 0 then
+  begin
+    aFoundNode := aNode;
+    Exit;
+  end;
+
+  // Recursively search child nodes
+  aNode := aNode.FirstChild;
+  while Assigned(aNode) do
+  begin
+    FindNodeByText(aVirtualStringTree, aNode, aSearchText, aFoundNode);
+    if Assigned(aFoundNode) then
+      Exit;
+    aNode := aNode.NextSibling;
+  end;
+end;
+
+function TMPANTREETests.FindPopupMenu(aName: string): TPopupMenu;
+var
+  i: Integer;
+begin
+  Result := nil;
+
+  for i := 0 to FRM_Tree.ComponentCount - 1 do
+    if (FRM_Tree.Components[i] is TPopupMenu) and
+       (FRM_Tree.Components[i].Name = aName) then
+    begin
+      Result := TPopupMenu(FRM_Tree.Components[i]);
+      Exit;
+    end;
+end;
+
+procedure TMPANTREETests.Setup;
+begin
+end;
+
+procedure TMPANTREETests.SetupFixture;
+begin
+  Application.CreateForm(TFRM_MAIN, FRM_MAIN);
+
+  FRM_Splash_Intro := TFRM_Splash_Intro.create(Application);
+  FRM_Splash_Intro.show;
+  FRM_Splash_Intro.update;
+
+  Application.CreateForm(TFRM_Tree, FRM_Tree);
+  FRM_Splash_Intro.Showprogress('MAIN');
+
+  Application.CreateForm(TDM_Images, DM_Images);
+  FRM_Splash_Intro.Showprogress('DM_Images');
+
+  Application.CreateForm(TFRM_Login, FRM_Login);
+  FRM_Splash_Intro.Showprogress('Login');
+
+  Application.CreateForm(TMain_Data_Module, Main_Data_Module);
+  FRM_Splash_Intro.Showprogress('Main Data Module');
+
+  Application.CreateForm(TFRM_Common, FRM_Common);
+  FRM_Splash_Intro.Showprogress('FRM_Common');
+
+  Application.CreateForm(TFRM_About, FRM_About);
+  FRM_Splash_Intro.Showprogress('About');
+
+  Application.CreateForm(TFRM_MAIN_Search, FRM_MAIN_Search);
+  FRM_MAIN_Search.OnSearchButtonClicked := FRM_Tree.HideAgreementReassignment;
+  FRM_Splash_Intro.Showprogress('MAIN_Search');
+
+  Application.CreateForm(TFRM_Enquiry_Search, FRM_Enquiry_Search);
+  FRM_SPLASH_INTRO.Showprogress('Enquiry_Search');
+
+  Application.CreateForm(TFRM_Enquiry_Summary, FRM_Enquiry_Summary);
+  FRM_Splash_Intro.Showprogress('Enquiry_Summary');
+
+  Application.CreateForm(TFRM_AVAILABLE_LETTERS, FRM_AVAILABLE_LETTERS);
+  FRM_Splash_Intro.Showprogress('FRM_AVAILABLE_LETTERS');
+
+  Application.CreateForm(TFRM_MOP_SERVICE_ORDERS, FRM_MOP_SERVICE_ORDERS);
+  FRM_Splash_Intro.Showprogress('FRM_MOP_SERVICE_ORDERS');
+
+  Application.CreateForm(TFRM_MARKETING_AND_CONSENT, FRM_MARKETING_AND_CONSENT);
+  FRM_Splash_Intro.Showprogress('FRM_MARKETING_AND_CONSENT');
+
+  Application.CreateForm(TFRM_PROCESSING, FRM_PROCESSING);
+  FRM_SPLASH_INTRO.Showprogress('FRM_PROCESSING');
+
+  Application.CreateForm(TFRM_LOSS_RESULT, FRM_LOSS_RESULT);
+  FRM_SPLASH_INTRO.Showprogress('FRM_LOSS_RESULT');
+
+  FRM_Splash_Intro.close;
+  FRM_Splash_Intro.release;
+
+  FRM_MAIN.InitialiseUnfocusedSelectionColours;
+
+  if Paramstr(1) <> '' then
+    Main.LogonDB := Paramstr(1)
+  else
+    Main.LogonDB := 'DEVCRM';
+
+  FRM_TreeSub := TFRM_TreeSub.Create(nil);
+  gSqlUtil := TSqlUtil.create(FRM_Login.mainsession);
+end;
+
+procedure TMPANTREETests.TestCustomerHasInvoluntaryModeChangeFlagFail(aCustomerId: Int64);
+var
+  expected, actual: boolean;
+begin
+  FRM_Login.MainSession.Connected := False;
+  FRM_Login.MainSession.LogonUsername := 'TEST01';
+  FRM_Login.MainSession.LogonPassword := 'TEST01';
+  FRM_Login.MainSession.LogonDatabase := 'DEVCRM';
+  FRM_Login.MainSession.Connected := True;
+
+  expected := False;
+  actual := FRM_TreeSub.CustomerHasInvoluntaryModeChangeFlag(aCustomerId);
+  Assert.AreEqual(expected, actual, ', not expected result for Involuntary Mode Change Flag!');
+end;
+
+procedure TMPANTREETests.TestCustomerHasInvoluntaryModeChangeFlagSuccess(aCustomerId: Int64);
+var
+  expected, actual: boolean;
+begin
+  FRM_Login.MainSession.Connected := False;
+  FRM_Login.MainSession.LogonUsername := 'TEST01';
+  FRM_Login.MainSession.LogonPassword := 'TEST01';
+  FRM_Login.MainSession.LogonDatabase := 'DEVCRM';
+  FRM_Login.MainSession.Connected := True;
+
+  expected := True;
+  actual := FRM_TreeSub.CustomerHasInvoluntaryModeChangeFlag(aCustomerId);
+  Assert.AreEqual(expected, actual, ', not expected result for Involuntary Mode Change Flag!');
+end;
+
+procedure TMPANTREETests.TearDown;
+begin
+end;
+
+procedure TMPANTREETests.TearDownFixture;
+begin
+  FreeAndNil(gFeatureAccessList);
+  FreeAndNil(gSqlUtil);
+  FreeAndNil(FRM_MAIN);
+  FreeAndNil(FRM_Tree);
+  FreeAndNil(DM_Images);
+  FreeAndNil(FRM_Login);
+  FreeAndNil(Main_Data_Module);
+  FreeAndNil(FRM_Common);
+  FreeAndNil(FRM_About);
+  FreeAndNil(FRM_MAIN_Search);
+  FreeAndNil(FRM_Enquiry_Summary);
+  FreeAndNil(FRM_AVAILABLE_LETTERS);
+  FreeAndNil(FRM_MOP_SERVICE_ORDERS);
+  FreeAndNil(FRM_MARKETING_AND_CONSENT);
+  FreeAndNil(FRM_Enquiry_Search);
+  FreeAndNil(FRM_PROCESSING);
+  FreeAndNil(FRM_LOSS_RESULT);
+
+  FreeAndNil(FRM_TreeSub);
+end;
+
+procedure TMPANTREETests.TestElectricMeterHasSCTariffFlag(aMpxn: string);
+var
+  expected: Integer;
+  actual: Integer;
+  FoundNode: PVirtualNode;
+  nodedata: PMyRec;
+begin
+  FRM_Login.MainSession.Connected := False;
+  FRM_Login.MainSession.LogonUsername := 'TEST01';
+  FRM_Login.MainSession.LogonPassword := 'TEST01';
+  FRM_Login.MainSession.LogonDatabase := 'DEVCRM';
+  FRM_Login.MainSession.Connected := True;
+
+  // Search for the electric meter by MPXN
+  FRM_MAIN_Search.PageControl.ActivePage := FRM_MAIN_Search.TabSheet2;
+  FRM_MAIN_Search.S2.Text := aMpxn;
+  FRM_MAIN_Search.btnCustSearch.Click;
+  
+  // Allow search to complete
+  Application.ProcessMessages;
+
+  // Get the first node (should be the MPAN result)
+  FoundNode := FRM_Tree.Treeview1.GetFirst;
+  
+  if Assigned(FoundNode) then
+  begin
+    // Debug: Check the parent node
+    nodedata := FRM_Tree.Treeview1.GetNodeData(FoundNode);
+    if Assigned(nodedata) then
+    begin
+      System.WriteLn('Parent Node Caption: ' + nodedata.Caption);
+      System.WriteLn('Parent Node Index: ' + IntToStr(nodedata.index));
+    end;
+    
+    // Manually trigger the expansion event to force lazy loading
+    FRM_Tree.Treeview1.FocusedNode := FoundNode;
+    FRM_Tree.Treeview1.Selected[FoundNode] := True;
+    
+    // Force expansion through the UI event system
+    FRM_Tree.Treeview1.Expanded[FoundNode] := True;
+    Application.ProcessMessages;
+    
+    // Navigate to second level (should be customer or premise)
+    FoundNode := FoundNode.FirstChild;
+    if Assigned(FoundNode) then
+    begin
+      FRM_Tree.Treeview1.Expanded[FoundNode] := True;
+      Application.ProcessMessages;
+      
+      // Navigate to third level (should be electric meter)
+      FoundNode := FoundNode.FirstChild;
+      
+      if Assigned(FoundNode) then
+      begin
+        // Look for the electric meter node specifically
+        while Assigned(FoundNode) do
+        begin
+          nodedata := FRM_Tree.Treeview1.GetNodeData(FoundNode);
+          if Assigned(nodedata) and (System.Pos('Electric', nodedata.Caption) > 0) then
+          begin
+            // Found electric node, call BuildElectricMeterNode to populate it
+            FRM_Tree.BuildElectricMeterNode(FoundNode);
+            Application.ProcessMessages;
+            
+            // Get the first child of the electric node (actual meter)
+            FoundNode := FoundNode.FirstChild;
+            if Assigned(FoundNode) then
+            begin
+              nodedata := FRM_Tree.Treeview1.GetNodeData(FoundNode);
+              
+              expected := 321; // Expected icon index for HAS_SC_TARIFF = 'Y'
+              actual := nodedata.index;
+              Assert.AreEqual(expected, actual, 'Electric meter ' + aMpxn + ' with HAS_SC_TARIFF should have icon index 321');
+              Exit;
+            end;
+          end;
+          FoundNode := FoundNode.NextSibling;
+        end;
+        Assert.Fail('Electric meter node not found in tree structure');
+      end
+      else
+        Assert.Fail('Third level nodes not found');
+    end
+    else
+      Assert.Fail('Second level nodes not found');
+  end
+  else
+    Assert.Fail('MPAN node ' + aMpxn + ' not found in tree view');
+
+  FRM_MAIN_Search.btnClear.Click;
+end;
+
+procedure TMPANTREETests.TestGasMeterHasSCTariffFlag(aMpxn: string);
+var
+  expected: Integer;
+  actual: Integer;
+  FoundNode: PVirtualNode;
+  nodedata: PMyRec;
+begin
+  FRM_Login.MainSession.Connected := False;
+  FRM_Login.MainSession.LogonUsername := 'TEST01';
+  FRM_Login.MainSession.LogonPassword := 'TEST01';
+  FRM_Login.MainSession.LogonDatabase := 'DEVCRM';
+  FRM_Login.MainSession.Connected := True;
+
+  // Search for the gas meter by MPXN
+  FRM_MAIN_Search.PageControl.ActivePage := FRM_MAIN_Search.TabSheet2;
+  FRM_MAIN_Search.S2.Text := aMpxn;
+  FRM_MAIN_Search.btnCustSearch.Click;
+
+  ExpandAllNodes(FRM_Tree.Treeview1);
+
+  FoundNode := nil;
+  FindNodeByText(FRM_Tree.Treeview1, FRM_Tree.Treeview1.GetFirst, aMpxn, FoundNode);
+
+  if Assigned(FoundNode) then
+  begin
+    // Ensure the tree is fully built and node data is populated
+    FRM_Tree.Treeview1.Refresh;
+    Application.ProcessMessages;
+    
+    nodedata := FRM_Tree.Treeview1.GetNodeData(FoundNode);
+    expected := 321; // Expected icon index for HAS_SC_TARIFF = 'Y'
+    actual := nodedata.index;
+    Assert.AreEqual(expected, actual, 'Gas meter ' + aMpxn + ' with HAS_SC_TARIFF should have icon index 321');
+  end
+  else
+    Assert.Fail('Gas meter node ' + aMpxn + ' not found in tree view');
+
+  FRM_MAIN_Search.btnClear.Click;
+end;
+
+procedure TMPANTREETests.TestOpeningAllEnquiriesNotesAfterExpandingTheFullCustomerTreeView;
+var
+  Expected, Actual: boolean;
+  FoundNode: PVirtualNode;
+begin
+  Expected := False;
+
+  FRM_MAIN_Search.PageControl.ActivePage := FRM_MAIN_Search.TabSheet2;
+  FRM_MAIN_Search.S2.Text := aMPAN;
+  FRM_MAIN_Search.btnCustSearch.Click;
+
+  ExpandAllNodes(FRM_Tree.Treeview1);
+
+  FoundNode := nil;
+  FindNodeByText(FRM_Tree.Treeview1, FRM_Tree.Treeview1.GetFirst, 'Customer', FoundNode);
+
+  if Assigned(FoundNode) then
+  begin
+    FRM_Tree.Treeview1.FocusedNode := FoundNode;
+    FRM_Tree.Treeview1.Selected[FoundNode] := True;
+
+    FRM_Tree.Treeview1.FocusedNode := FRM_Tree.Treeview1.GetFirst;
+    FRM_Tree.Treeview1.Selected[FRM_Tree.Treeview1.GetFirst] := True;
+
+    FRM_Tree.Enquiries1.Click;
+
+    Actual := FRM_Enquiry_Summary.Enquiries.RecordCount > 0;
+  end
+  else
+    Actual := False;
+
+  Expected := True;
+
+  Assert.AreEqual(Expected, Actual, ', enquiry basket not empty!');
+  FoundNode := nil;
+  FRM_Main.Close;
+end;
+
+procedure TMPANTREETests.TestOpeningAllEnquiriesNotesAfterSearchingFromCustomer(aUserName, aPassword, aCustomerID: string);
+var
+  Expected, Actual: boolean;
+  FoundNode: PVirtualNode;
+begin
+  Expected := False;
+
+  FRM_MAIN_Search.PageControl.ActivePage := FRM_MAIN_Search.TabSheet_Customer;
+  FRM_MAIN_Search.C2.Text := aCustomerID;
+  FRM_MAIN_Search.cbxSearchCustomerView.Checked := False;
+  FRM_MAIN_Search.btnCustSearch.Click;
+
+  ExpandAllNodes(FRM_Tree.Treeview1);
+
+  FoundNode := nil;
+  FindNodeByText(FRM_Tree.Treeview1, FRM_Tree.Treeview1.GetFirst, 'Electricity', FoundNode);
+
+  if Assigned(FoundNode) then
+  begin
+    FRM_Tree.Treeview1.FocusedNode := FoundNode;
+    FRM_Tree.Treeview1.Selected[FoundNode] := True;
+
+    FRM_Tree.Enquiries1.Click;
+
+    Actual := FRM_Enquiry_Summary.Enquiries.Active;
+  end
+  else
+    Actual := False;
+
+  Expected := True;
+
+  Assert.AreEqual(Expected, Actual, ', enquiry basket not empty!');
+  FoundNode := nil;
+  FRM_ENQUIRY_SUMMARY.Close;
+  FRM_Tree.Close;
+  FRM_MAIN_Search.btnClear.Click;
+end;
+
+procedure TMPANTREETests.TestFindMenuItem(aPopupMenuName, aMenuItemName: string);
+var
+  foundItem: TMenuItem;
+  popupMenu: TPopupMenu;
+begin
+  popupMenu := FindPopupMenu(aPopupMenuName);
+  Assert.IsNotNull(popupMenu, Format('PopupMenu "%s" should exist.', [aPopupMenuName]));
+  foundItem := FindMenuItem(popupMenu.Items, aMenuItemName);
+  Assert.IsNotNull(foundItem, Format('Menu item "%s" should be found in "%s".', [aMenuItemName, aPopupMenuName]))
+end;
+
+procedure TMPANTREETests.TestOpeningAllEnquiriesNotes(aUserName, aPassword, aMPAN: string);
+var
+  Expected, Actual: boolean;
+begin
+  Expected := False;
+
+  FRM_Login.edtUsername.Text := aUserName;
+  FRM_Login.edtPassword.Text := aPassword;
+  FRM_Login.Login(aUserName, aPassword, Main.LogonDB);
+
+  gFeatureAccessList := TFeatureAccessList.Create;
+
+  FRM_MAIN.T_Search.Click;
+
+  FRM_MAIN_Search.PageControl.ActivePage := FRM_MAIN_Search.TabSheet2;
+  FRM_MAIN_Search.S2.Text := aMPAN;
+  FRM_MAIN_Search.btnCustSearch.Click;
+
+  FRM_Tree.Treeview1.FocusedNode := FRM_Tree.Treeview1.GetFirst;
+  FRM_Tree.Treeview1.Selected[FRM_Tree.Treeview1.GetFirst] := True;
+  FRM_Tree.Enquiries1.Click;
+
+  Expected := True;
+
+  Actual := FRM_Enquiry_Summary.Enquiries.RecordCount > 0;
+  Assert.AreEqual(Expected, Actual, ', enquiry basket not empty!');
+  FRM_ENQUIRY_SUMMARY.Close;
+  FRM_Tree.Close;
+  FRM_MAIN_Search.btnClear.Click;
+end;
+
+initialization
+ {$IFDEF GENERAL}
+   TDUnitX.RegisterTestFixture(TMPANTREETests);
+ {$ENDIF}
+end.
